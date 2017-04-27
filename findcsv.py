@@ -77,16 +77,16 @@ def main(clsvar):
             if dictfinding.get("findORitems2", 0 ) == 0 :
                 # got only the findORitems1
                 for strfind in dictfinding["findORitems1"] :
-                    if strfind.lower() in dictitems["temp"] :  # dictitems["temp"] :  sentence to search
+                    if strfind.lower() in dictitems["CAUSE_DESC"] :  # dictitems["CAUSE_DESC"] :  sentence to search
                         found = dictfinding["head"]
 
 
             else:
                 # got both the findORitems1 and findORitems2
                 for strfind1 in dictfinding["findORitems1"] :
-                    if strfind1.lower() in dictitems["temp"] :  # dictitems["temp"] :  sentence to search
+                    if strfind1.lower() in dictitems["CAUSE_DESC"] :  # dictitems["CAUSE_DESC"] :  sentence to search
                         for strfind2 in dictfinding["findORitems2"] :
-                            if strfind2.lower() in dictitems["temp"] :  # dictitems["temp"] :  sentence to search
+                            if strfind2.lower() in dictitems["CAUSE_DESC"] :  # dictitems["CAUSE_DESC"] :  sentence to search
                                 found += strfind2
 
             foutcsv.write(found + ",")
@@ -141,7 +141,7 @@ def getSymptomSegmentation(clsvar):
         listitems = line.strip().split(",")
         dictitems = dict(zip(listheads, listitems))
 
-        setSegment.update( replacesymbolwithspace(dictitems["temp"]).split() )
+        setSegment.update( replacesymbolwithspace(dictitems["CAUSE_DESC"]).split() )
 
     # pprint.pprint(setkeyword)
     foutcsv = open(clsvar.fileseqment, "w", encoding="utf-8")
@@ -291,7 +291,7 @@ listSentenceWords = [
 
 
     ]
-listoutputhead = ["MODEL","모델","WARRANTY_FLAG", "DEFECT_DESC","CRC32","temp"]
+listoutputhead = ["MODEL","모델","WARRANTY_FLAG", "DEFECT_DESC","CRC32","CAUSE_DESC", "RCPT_DT_ORD_DT"]
 
 
 def combinatekeyword(clsvar):
@@ -324,16 +324,33 @@ def combinatekeyword(clsvar):
     listfincsv = [aa.lower() for aa in listfincsv]
 
     ddictlistlinenos = collections.defaultdict(list)
-    countline = 1
+    countline = 0
 
     print("before loop of replacing keyword and finding")
+
+    # 초기화 문구 찾을 때,
+    listinitializewords = ["초기", "emergency", "이머전시", "이머젼시" ]
+
     for line in listfincsv[1:] :
+        countline += 1
+        if countline % 50 == 0 :
+            print(".", end="")
+
+        if countline % 500 == 0 :
+            print("\n")
 
         listitems = line.strip().split(",")
         dictitems = dict(zip(listheads, listitems))
 
+        # 초기 혹은 emergency word가 있는 경우만 처리할 경우 아래의 line을 활성화한다.
+        # 즉, emergency word가 전혀 발견되지 않으면 처리하지 않는다.
+        listinitword = [ (dictitems["PROC_DETAIL"].find(aa) == -1) for aa in listinitializewords ]
+        if all(listinitword) == True :
+            continue
+
+
         # replace the symbols with space
-        strtemp = replacesymbolwithspace(dictitems["temp"])
+        strtemp = replacesymbolwithspace(dictitems["CAUSE_DESC"])
 
         # replace the smiliar word with listkeywordreplace[][0]
         for listkeywordreplace in listlistkeywordreplace :
@@ -356,6 +373,7 @@ def combinatekeyword(clsvar):
                     listfoundkeywords.append(keywordsort)
 
         # make the combination the found word, add the line number to ddictcount
+        maxcombi = len(listfoundkeywords)
         if len(listfoundkeywords) > 2 :
             maxcombi = 2
         for combino in range(1, maxcombi+ 1 ) :
@@ -363,12 +381,7 @@ def combinatekeyword(clsvar):
                 ddictlistlinenos[tuple(sorted(tuplekeyword))].append(countline)
 
 
-        countline += 1
-        if countline % 50 == 0 :
-            print(".", end="")
 
-        if countline % 500 == 0 :
-            print("\n")
 
     # count the number of countline of combi and  ordering-down that .
     print("count the number of combi lines")
@@ -379,7 +392,8 @@ def combinatekeyword(clsvar):
     # sort the listlistsetcount
     listlistsetcount.sort(key=lambda item: item[1], reverse=True)
 
-    # writle out the content of listlistsetcount
+    # write out the content of listlistsetcount
+    # keyword별  빈도수를 구한다. 이는 중요 keyword을 선택하기 위해서.
     print("writing to listlistsetcount.csv")
     fsetcount = open("listlistsetcount.csv", "w", encoding="utf-8")
     for listsetcount in listlistsetcount :
@@ -388,9 +402,8 @@ def combinatekeyword(clsvar):
         fsetcount.write(str(listsetcount[1]) + "," + str(len(listsetcount[0]))+ "," + ",".join(listsetcount[0]) + "\n")
     fsetcount.close()
 
-    dirsave = "temp"
     try:
-        os.mkdir(dirsave)
+        os.mkdir(clsvar.tempdir)
     except:
         pass
 
@@ -411,14 +424,14 @@ def combinatekeyword(clsvar):
         # print("listsetcount[0] : %s , listsetcount[1]: %s"%(listsetcount[0], listsetcount[1]))
 
         fcombicsv = "-".join(["%0.6d"% listsetcount[1], "_".join(listsetcount[0])]) + ".csv"
-        fcombicsv =  os.path.join(dirsave, fcombicsv)
+        fcombicsv =  os.path.join(clsvar.tempdir, fcombicsv)
 
         foutcsv = open( fcombicsv, "w", encoding="utf-8")
         foutcsv.write(",".join(listoutputhead) + "\n")
         for lineno in ddictlistlinenos[listsetcount[0]] :
             dictitems = dict(zip(listheads, listfincsv[lineno].strip().split(",")))
-            crc32 = binascii.crc32(bytes(dictitems["temp"], encoding="utf-8"))
-            foutcsv.write( ",".join([dictitems["MODEL"],dictitems["모델"],dictitems["WARRANTY_FLAG"],dictitems["DEFECT_DESC"], str(crc32), dictitems["temp"]]) +"\n")
+            crc32 = binascii.crc32(bytes(dictitems["MODEL"] + dictitems["CAUSE_DESC"] + dictitems.get("RCPT_DT_ORD_DT", "00000000")[0:8], encoding="utf-8"))
+            foutcsv.write( ",".join([dictitems["MODEL"],dictitems["모델"],dictitems["WARRANTY_FLAG"],dictitems["DEFECT_DESC"], str(crc32), dictitems["CAUSE_DESC"], dictitems.get("RCPT_DT_ORD_DT", "000000")[0:6]]) +"\n")
         foutcsv.close()
 
 
@@ -512,6 +525,7 @@ if __name__ == "__main__":
     cmdlineopt.add_argument('-i', action="store", dest="fileincsv", default='', help='input csv file .')
     cmdlineopt.add_argument('-o', action="store", dest="fileoutdir", default='output', help='output dir .')
     cmdlineopt.add_argument('-s', action="store", dest="sentencedir", default='sentence', help='sentence csv file dir.')
+    cmdlineopt.add_argument('-t', action="store", dest="tempdir", default='tempdir', help='temporary dir.')
     cmdlineopt.add_argument('-p', action="store", dest="keywordprev", default='keywordprev.txt', help='keyword file .')
     cmdlineopt.add_argument('-k', action="store", dest="keywords", default='keywords.txt', help='keyword sorted file .')
     cmdlineopt.add_argument('-r', action="store", dest="filekeyreplace", default='keyreplace.txt', help='keyword replace file .')
@@ -537,7 +551,7 @@ if __name__ == "__main__":
     combinatekeyword(clsvar)
     
     # 5. keysentence에 해당하는 파일을 temp dir에서 sentence dir에 copy한다.
-    copySentenceWordsCSV("temp", clsvar.sentencedir, listSentenceWords)
+    copySentenceWordsCSV(clsvar.tempdir, clsvar.sentencedir, listSentenceWords)
 
     # 6. groupSentensceByCoreWord(clsvar)은  listSentenceWords CSV file list을 core 이름 군으로  grouping하고,
     # 이를  "core이름".csv 이름의 파일에 출력한다.
